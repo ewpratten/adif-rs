@@ -2,15 +2,18 @@ use std::str::FromStr;
 
 grammar;
 
-pub RecordValue: (String, u32, Option<char>) = {
-    "<" <k:Key> ":" <l:Len> <t:Type?> ">" => (k, l, t)
+pub RecordValue: (String, u32, Option<char>, String) = {
+    "<" <k:Key> ":" <l:Len> <t:Type?> ">" <v:Value> => (k, l, t, v)
 };
 
 // Definition for a record value's key
 Key: String = <s:r"[A-Za-z_]+"> => String::from(s).to_uppercase();
 
 // Definition for a record value's length
-Len: u32 = <s:r"[0-9]+"> => u32::from_str(s).unwrap();
+Len: u32 = <s:r"\d+"> => u32::from_str(s).unwrap();
 
 // Definition for a record value's type
 Type: char = <s:r":[A-Za-z]"> => String::from(s).to_uppercase().chars().nth(1).unwrap();
+
+// Definition for a record value's value
+Value: String = <s:r"[^<]*"> => String::from(s);
