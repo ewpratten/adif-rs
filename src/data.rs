@@ -114,7 +114,14 @@ impl<'a> AdifType<'a> {
     }
 }
 
+impl<'a> Display for AdifType<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 /// A single ADIF record, consisting of many values
+#[derive(Debug, Clone, PartialEq)]
 pub struct AdifRecord<'a>(IndexMap<String, AdifType<'a>>);
 
 impl<'a> AdifRecord<'a> {
@@ -148,7 +155,14 @@ impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifRecord<'a> {
     }
 }
 
+impl<'a> Display for AdifRecord<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.serialize())
+    }
+}
+
 /// An ADIF file header, consisting of many values
+#[derive(Debug, Clone, PartialEq)]
 pub struct AdifHeader<'a>(IndexMap<String, AdifType<'a>>);
 
 impl<'a> AdifHeader<'a> {
@@ -180,6 +194,35 @@ impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifHeader<'a> {
                 .map(|(key, value)| (key.to_string(), value.clone()))
                 .collect(),
         }
+    }
+}
+
+impl<'a> Display for AdifHeader<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.serialize())
+    }
+}
+
+/// Defines an entire file of ADIF data
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdifFile<'a> {
+    pub header: AdifHeader<'a>,
+    pub body: Vec<AdifRecord<'a>>,
+}
+
+impl<'a> AdifFile<'a> {
+
+    /// Serialize into text data to be written to a file
+    pub fn serialize(&self) -> Result<String, SerializeError> {
+        Ok(format!(
+            "{}\n{}",
+            self.header.serialize()?,
+            self.body
+                .iter()
+                .map(|record| record.serialize())
+                .collect::<Result<Vec<String>, SerializeError>>()?
+                .join("\n")
+        ))
     }
 }
 
