@@ -1,6 +1,7 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use chrono::{Datelike, Timelike, Utc};
+use indexmap::IndexMap;
 
 #[derive(Debug)]
 pub struct SerializeError<'a> {
@@ -114,7 +115,7 @@ impl<'a> AdifType<'a> {
 }
 
 /// A single ADIF record, consisting of many values
-pub struct AdifRecord<'a>(HashMap<String, AdifType<'a>>);
+pub struct AdifRecord<'a>(IndexMap<String, AdifType<'a>>);
 
 impl<'a> AdifRecord<'a> {
     /// Serialize into a full record string
@@ -130,14 +131,49 @@ impl<'a> AdifRecord<'a> {
     }
 }
 
-impl<'a> From<HashMap<String, AdifType<'a>>> for AdifRecord<'a> {
-    fn from(map: HashMap<String, AdifType<'a>>) -> Self {
+impl<'a> From<IndexMap<String, AdifType<'a>>> for AdifRecord<'a> {
+    fn from(map: IndexMap<String, AdifType<'a>>) -> Self {
         Self { 0: map }
     }
 }
 
-impl<'a> From<HashMap<&'a str, AdifType<'a>>> for AdifRecord<'a> {
-    fn from(map: HashMap<&'a str, AdifType<'a>>) -> Self {
+impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifRecord<'a> {
+    fn from(map: IndexMap<&'a str, AdifType<'a>>) -> Self {
+        Self {
+            0: map
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect(),
+        }
+    }
+}
+
+/// An ADIF file header, consisting of many values
+pub struct AdifHeader<'a>(IndexMap<String, AdifType<'a>>);
+
+impl<'a> AdifHeader<'a> {
+    /// Serialize into a full header string
+    pub fn serialize(&self) -> Result<String, SerializeError> {
+        let mut output = self
+            .0
+            .iter()
+            .map(|(key, value)| value.serialize(&key))
+            .collect::<Result<Vec<String>, SerializeError>>()?
+            .join("\n");
+        output.push_str("\n");
+        output.push_str("<EOH>");
+        Ok(output)
+    }
+}
+
+impl<'a> From<IndexMap<String, AdifType<'a>>> for AdifHeader<'a> {
+    fn from(map: IndexMap<String, AdifType<'a>>) -> Self {
+        Self { 0: map }
+    }
+}
+
+impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifHeader<'a> {
+    fn from(map: IndexMap<&'a str, AdifType<'a>>) -> Self {
         Self {
             0: map
                 .iter()
@@ -217,21 +253,36 @@ mod types_tests {
 
 #[cfg(test)]
 mod record_tests {
-    use maplit::hashmap;
+
+    use indexmap::indexmap;
 
     use super::*;
 
     #[test]
     pub fn test_ser_record() {
-        let test_record: AdifRecord = hashmap! {
+        let test_record: AdifRecord = indexmap! {
+            "a number" => AdifType::Number(15.5),
             "test string" => AdifType::Str("Heyo rusty friends!"),
-            "a number" => AdifType::Number(15.5)
         }
         .into();
 
         assert_eq!(
             test_record.serialize().unwrap(),
-            "<TEST_STRING:19>Heyo rusty friends!<A_NUMBER:4:N>15.5<eor>"
+            "<A_NUMBER:4:N>15.5<TEST_STRING:19>Heyo rusty friends!<eor>"
+        );
+    }
+
+    #[test]
+    pub fn test_ser_header() {
+        let test_header: AdifHeader = indexmap! {
+            "a number" => AdifType::Number(15.5),
+            "test string" => AdifType::Str("Heyo rusty friends!"),
+        }
+        .into();
+
+        assert_eq!(
+            test_header.serialize().unwrap(),
+            "<A_NUMBER:4:N>15.5\n<TEST_STRING:19>Heyo rusty friends!\n<EOH>"
         );
     }
 }
