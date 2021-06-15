@@ -1,0 +1,6 @@
+{
+    "cSpell.words": [
+        "lalrpop"
+    ],
+    "rust-analyzer.cargo.runBuildScripts": true
+}
