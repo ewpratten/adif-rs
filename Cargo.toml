@@ -8,9 +8,5 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lalrpop-util = "0.19.6"
 chrono = "0.4.19"
 indexmap = "1.6.2"
-
-[build-dependencies]
-lalrpop = "0.19.6"
