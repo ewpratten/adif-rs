@@ -3,12 +3,12 @@ use std::{collections::HashMap, fmt::Display};
 use chrono::{Datelike, Timelike, Utc};
 
 #[derive(Debug)]
-pub struct SerializeError {
-    pub message: String,
+pub struct SerializeError<'a> {
+    pub message: &'a str,
     pub offender: String,
 }
 
-impl Display for SerializeError {
+impl<'a> Display for SerializeError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}. Offending value: {}", self.message, self.offender)
     }
@@ -16,9 +16,9 @@ impl Display for SerializeError {
 
 /// Supported datatypes for representing ADIF data
 #[derive(Debug, Clone, PartialEq)]
-pub enum AdifType {
+pub enum AdifType<'a> {
     /// Basic string type
-    Str(String),
+    Str(&'a str),
 
     /// Basic boolean type
     Boolean(bool),
@@ -40,7 +40,7 @@ pub enum AdifType {
     Time(chrono::NaiveTime),
 }
 
-impl AdifType {
+impl<'a> AdifType<'a> {
     /// Get the single-char indicator used to specify a type
     pub fn get_data_type_indicator(&self) -> Option<char> {
         match self {
@@ -52,25 +52,26 @@ impl AdifType {
         }
     }
 
-    pub fn serialize(&self, key_name: String) -> Result<String, SerializeError> {
+    /// Serialize into a single value
+    pub fn serialize(&self, key_name: &str) -> Result<String, SerializeError> {
         // Convert enum value into a usable string
         let value: Result<String, SerializeError> = match self {
             AdifType::Str(val) => {
                 // String cannot contain linebreaks, and must be ASCII
                 if val.contains('\n') {
                     return Err(SerializeError {
-                        message: "String cannot contain linebreaks".to_string(),
-                        offender: val.clone(),
+                        message: "String cannot contain linebreaks",
+                        offender: val.to_string(),
                     });
                 }
                 if !val.is_ascii() {
                     return Err(SerializeError {
-                        message: "String must be ASCII".to_string(),
-                        offender: val.clone(),
+                        message: "String must be ASCII",
+                        offender: val.to_string(),
                     });
                 }
 
-                Ok(val.clone())
+                Ok(val.to_string())
             }
             AdifType::Boolean(val) => Ok(match val {
                 true => "Y",
@@ -82,7 +83,7 @@ impl AdifType {
                 // Date must be after 1929
                 if val.year() < 1930 {
                     return Err(SerializeError {
-                        message: "Date must be >= 1930".to_string(),
+                        message: "Date must be >= 1930",
                         offender: val.to_string(),
                     });
                 }
@@ -96,7 +97,7 @@ impl AdifType {
                 val.second()
             )),
         };
-        let value = value?;
+        let value: &str = &(value?);
 
         // Format the result
         Ok(format!(
@@ -113,7 +114,38 @@ impl AdifType {
 }
 
 /// A single ADIF record, consisting of many values
-pub type AdifRecord = HashMap<String, AdifType>;
+pub struct AdifRecord<'a>(HashMap<String, AdifType<'a>>);
+
+impl<'a> AdifRecord<'a> {
+    /// Serialize into a full record string
+    pub fn serialize(&self) -> Result<String, SerializeError> {
+        let mut output = self
+            .0
+            .iter()
+            .map(|(key, value)| value.serialize(&key))
+            .collect::<Result<Vec<String>, SerializeError>>()?
+            .join("");
+        output.push_str("<eor>");
+        Ok(output)
+    }
+}
+
+impl<'a> From<HashMap<String, AdifType<'a>>> for AdifRecord<'a> {
+    fn from(map: HashMap<String, AdifType<'a>>) -> Self {
+        Self { 0: map }
+    }
+}
+
+impl<'a> From<HashMap<&'a str, AdifType<'a>>> for AdifRecord<'a> {
+    fn from(map: HashMap<&'a str, AdifType<'a>>) -> Self {
+        Self {
+            0: map
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect(),
+        }
+    }
+}
 
 #[cfg(test)]
 mod types_tests {
@@ -124,46 +156,36 @@ mod types_tests {
     #[test]
     pub fn test_ser_string() {
         assert_eq!(
-            AdifType::Str("Hello, world!".to_string())
-                .serialize("test".to_string())
-                .unwrap(),
-            "<TEST:13>Hello, world!".to_string()
+            AdifType::Str("Hello, world!").serialize("test").unwrap(),
+            "<TEST:13>Hello, world!"
         );
     }
 
     #[test]
     pub fn test_ser_bool() {
         assert_eq!(
-            AdifType::Boolean(true)
-                .serialize("test".to_string())
-                .unwrap(),
-            "<TEST:1:B>Y".to_string()
+            AdifType::Boolean(true).serialize("test").unwrap(),
+            "<TEST:1:B>Y"
         );
         assert_eq!(
-            AdifType::Boolean(false)
-                .serialize("test".to_string())
-                .unwrap(),
-            "<TEST:1:B>N".to_string()
+            AdifType::Boolean(false).serialize("test").unwrap(),
+            "<TEST:1:B>N"
         );
     }
 
     #[test]
     pub fn test_ser_num() {
         assert_eq!(
-            AdifType::Number(3.5).serialize("test".to_string()).unwrap(),
-            "<TEST:3:N>3.5".to_string()
+            AdifType::Number(3.5).serialize("test").unwrap(),
+            "<TEST:3:N>3.5"
         );
         assert_eq!(
-            AdifType::Number(-3.5)
-                .serialize("test".to_string())
-                .unwrap(),
-            "<TEST:4:N>-3.5".to_string()
+            AdifType::Number(-3.5).serialize("test").unwrap(),
+            "<TEST:4:N>-3.5"
         );
         assert_eq!(
-            AdifType::Number(-12.0)
-                .serialize("test".to_string())
-                .unwrap(),
-            "<TEST:3:N>-12".to_string()
+            AdifType::Number(-12.0).serialize("test").unwrap(),
+            "<TEST:3:N>-12"
         );
     }
 
@@ -171,13 +193,14 @@ mod types_tests {
     pub fn test_ser_date() {
         assert_eq!(
             AdifType::Date(Date::from_utc(NaiveDate::from_ymd(2020, 2, 24), Utc))
-                .serialize("test".to_string())
+                .serialize("test")
                 .unwrap(),
-            "<TEST:8:D>20200224".to_string()
+            "<TEST:8:D>20200224"
         );
         assert!(
             AdifType::Date(Date::from_utc(NaiveDate::from_ymd(1910, 2, 2), Utc))
-                .serialize("test".to_string()).is_err()
+                .serialize("test")
+                .is_err()
         );
     }
 
@@ -185,9 +208,30 @@ mod types_tests {
     pub fn test_ser_time() {
         assert_eq!(
             AdifType::Time(NaiveTime::from_hms(23, 2, 5))
-                .serialize("test".to_string())
+                .serialize("test")
                 .unwrap(),
-            "<TEST:6:T>230205".to_string()
+            "<TEST:6:T>230205"
+        );
+    }
+}
+
+#[cfg(test)]
+mod record_tests {
+    use maplit::hashmap;
+
+    use super::*;
+
+    #[test]
+    pub fn test_ser_record() {
+        let test_record: AdifRecord = hashmap! {
+            "test string" => AdifType::Str("Heyo rusty friends!"),
+            "a number" => AdifType::Number(15.5)
+        }
+        .into();
+
+        assert_eq!(
+            test_record.serialize().unwrap(),
+            "<TEST_STRING:19>Heyo rusty friends!<A_NUMBER:4:N>15.5<eor>"
         );
     }
 }
