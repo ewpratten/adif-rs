@@ -2,7 +2,7 @@ use chrono::{Date, NaiveDate, NaiveTime, Utc};
 use indexmap::IndexMap;
 use regex::Regex;
 
-use crate::data::{AdifRecord, AdifType};
+use crate::data::{AdifFile, AdifHeader, AdifRecord, AdifType};
 
 const TOKEN_RE: &str = r"(?:<([A-Za-z_]+):(\d+)(?::([A-Za-z]))?>([^<]*))";
 
@@ -30,7 +30,7 @@ fn parse_line_to_tokens(line: &str) -> Vec<Token> {
         .collect()
 }
 
-fn parse_tokens_to_record<'a>(tokens: &'a Vec<Token>) -> AdifRecord<'a> {
+fn create_token_map(tokens: Vec<Token>) -> IndexMap<String, AdifType> {
     // Build a map
     let mut map = IndexMap::new();
 
@@ -42,25 +42,66 @@ fn parse_tokens_to_record<'a>(tokens: &'a Vec<Token>) -> AdifRecord<'a> {
                 Some(ty) => match ty {
                     'B' => AdifType::Boolean(token.value.to_uppercase() == "Y"),
                     'N' => AdifType::Number(
-                        ty.to_string()
-                            .parse()
+                        lexical::parse(token.value.to_string())
                             .expect("Found a number value that cannot be parsed"),
                     ),
                     'D' => AdifType::Date(Date::from_utc(
-                        NaiveDate::parse_from_str(&token.value.clone(), "%Y%m%d").unwrap(),
+                        NaiveDate::parse_from_str(token.value.as_str(), "%Y%m%d").unwrap(),
                         Utc,
                     )),
                     'T' => AdifType::Time(
-                        NaiveTime::parse_from_str(&token.value.clone(), "%H%M%S").unwrap(),
+                        NaiveTime::parse_from_str(token.value.as_str(), "%H%M%S").unwrap(),
                     ),
-                    _ => AdifType::Str(token.value.as_str()),
+                    _ => AdifType::Str(token.value),
                 },
-                None => AdifType::Str(token.value.as_str()),
+                None => AdifType::Str(token.value),
             },
         );
     }
+    map
+}
 
-    return map.into();
+fn parse_tokens_to_record(tokens: Vec<Token>) -> AdifRecord {
+    create_token_map(tokens).into()
+}
+
+fn parse_tokens_to_header(tokens: Vec<Token>) -> AdifHeader {
+    create_token_map(tokens).into()
+}
+
+/// Parse the contents of an ADIF (`.adi`) file into a struct representation
+pub fn parse_adif(data: &str) -> AdifFile {
+    // Clean up EOH and EOR tokens
+    let data = data.replace("<eoh>", "<EOH>");
+    let data = data.replace("<eor>", "<EOR>");
+    let data = data.split("<EOH>");
+    let data = data.collect::<Vec<&str>>();
+
+    // Split file into a header and body
+    let header_raw = data.first().unwrap_or(&"");
+    let body_raw = data.last().unwrap_or(&"");
+
+    // Parse the header
+    let header_tokens = parse_line_to_tokens(&header_raw);
+    let header = parse_tokens_to_header(header_tokens);
+
+    // Create the file
+    let file = AdifFile {
+        header,
+        body: body_raw
+            .split("<EOR>")
+            .collect::<Vec<&str>>()
+            .iter()
+            .map(|record_line| {
+                // Parse the record
+                let record_tokens = parse_line_to_tokens(&record_line);
+                parse_tokens_to_record(record_tokens)
+            })
+            .collect(),
+    };
+
+    // Return
+    file
 }
 
 #[cfg(test)]
@@ -74,5 +115,18 @@ mod tokenization_tests {
         assert_eq!(result.len(), 3);
         assert_eq!(result[0].key, "CALL");
         assert_eq!(result[0].value, "VA3ZZA");
+    }
+
+    #[test]
+    pub fn test_tokens_to_record() {
+        let tokens = parse_line_to_tokens("<CALL:4>VA3ZZA<A_NUMBER:3:N>401<BOOL:1:B>N<eor>");
+        let record = parse_tokens_to_record(tokens);
+
+        assert_eq!(
+            record.get("CALL"),
+            Some(&AdifType::Str("VA3ZZA".to_string()))
+        );
+        assert_eq!(record.get("A_NUMBER"), Some(&AdifType::Number(401.0)));
+        assert_eq!(record.get("BOOL"), Some(&AdifType::Boolean(false)));
     }
 }

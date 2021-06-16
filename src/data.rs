@@ -1,15 +1,15 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::{Deref, DerefMut}};
 
 use chrono::{Datelike, Timelike, Utc};
 use indexmap::IndexMap;
 
 #[derive(Debug)]
-pub struct SerializeError<'a> {
-    pub message: &'a str,
+pub struct SerializeError {
+    pub message: String,
     pub offender: String,
 }
 
-impl<'a> Display for SerializeError<'_> {
+impl Display for SerializeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}. Offending value: {}", self.message, self.offender)
     }
@@ -17,9 +17,9 @@ impl<'a> Display for SerializeError<'_> {
 
 /// Supported datatypes for representing ADIF data
 #[derive(Debug, Clone, PartialEq)]
-pub enum AdifType<'a> {
+pub enum AdifType {
     /// Basic string type
-    Str(&'a str),
+    Str(String),
 
     /// Basic boolean type
     Boolean(bool),
@@ -41,7 +41,7 @@ pub enum AdifType<'a> {
     Time(chrono::NaiveTime),
 }
 
-impl<'a> AdifType<'a> {
+impl AdifType {
     /// Get the single-char indicator used to specify a type
     pub fn get_data_type_indicator(&self) -> Option<char> {
         match self {
@@ -61,13 +61,13 @@ impl<'a> AdifType<'a> {
                 // String cannot contain linebreaks, and must be ASCII
                 if val.contains('\n') {
                     return Err(SerializeError {
-                        message: "String cannot contain linebreaks",
+                        message: "String cannot contain linebreaks".to_string(),
                         offender: val.to_string(),
                     });
                 }
                 if !val.is_ascii() {
                     return Err(SerializeError {
-                        message: "String must be ASCII",
+                        message: "String must be ASCII".to_string(),
                         offender: val.to_string(),
                     });
                 }
@@ -84,7 +84,7 @@ impl<'a> AdifType<'a> {
                 // Date must be after 1929
                 if val.year() < 1930 {
                     return Err(SerializeError {
-                        message: "Date must be >= 1930",
+                        message: "Date must be >= 1930".to_string(),
                         offender: val.to_string(),
                     });
                 }
@@ -114,7 +114,7 @@ impl<'a> AdifType<'a> {
     }
 }
 
-impl<'a> Display for AdifType<'a> {
+impl Display for AdifType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -122,9 +122,9 @@ impl<'a> Display for AdifType<'a> {
 
 /// A single ADIF record, consisting of many values
 #[derive(Debug, Clone, PartialEq)]
-pub struct AdifRecord<'a>(IndexMap<String, AdifType<'a>>);
+pub struct AdifRecord(IndexMap<String, AdifType>);
 
-impl<'a> AdifRecord<'a> {
+impl AdifRecord {
     /// Serialize into a full record string
     pub fn serialize(&self) -> Result<String, SerializeError> {
         let mut output = self
@@ -138,14 +138,14 @@ impl<'a> AdifRecord<'a> {
     }
 }
 
-impl<'a> From<IndexMap<String, AdifType<'a>>> for AdifRecord<'a> {
-    fn from(map: IndexMap<String, AdifType<'a>>) -> Self {
+impl From<IndexMap<String, AdifType>> for AdifRecord {
+    fn from(map: IndexMap<String, AdifType>) -> Self {
         Self { 0: map }
     }
 }
 
-impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifRecord<'a> {
-    fn from(map: IndexMap<&'a str, AdifType<'a>>) -> Self {
+impl<'a> From<IndexMap<&'a str, AdifType>> for AdifRecord {
+    fn from(map: IndexMap<&'a str, AdifType>) -> Self {
         Self {
             0: map
                 .iter()
@@ -155,17 +155,32 @@ impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifRecord<'a> {
     }
 }
 
-impl<'a> Display for AdifRecord<'a> {
+impl Display for AdifRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.serialize())
     }
 }
 
+impl Deref for AdifRecord {
+    type Target = IndexMap<String, AdifType>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for AdifRecord {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+
 /// An ADIF file header, consisting of many values
 #[derive(Debug, Clone, PartialEq)]
-pub struct AdifHeader<'a>(IndexMap<String, AdifType<'a>>);
+pub struct AdifHeader(IndexMap<String, AdifType>);
 
-impl<'a> AdifHeader<'a> {
+impl AdifHeader {
     /// Serialize into a full header string
     pub fn serialize(&self) -> Result<String, SerializeError> {
         let mut output = self
@@ -180,14 +195,14 @@ impl<'a> AdifHeader<'a> {
     }
 }
 
-impl<'a> From<IndexMap<String, AdifType<'a>>> for AdifHeader<'a> {
-    fn from(map: IndexMap<String, AdifType<'a>>) -> Self {
+impl From<IndexMap<String, AdifType>> for AdifHeader {
+    fn from(map: IndexMap<String, AdifType>) -> Self {
         Self { 0: map }
     }
 }
 
-impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifHeader<'a> {
-    fn from(map: IndexMap<&'a str, AdifType<'a>>) -> Self {
+impl<'a> From<IndexMap<&'a str, AdifType>> for AdifHeader {
+    fn from(map: IndexMap<&'a str, AdifType>) -> Self {
         Self {
             0: map
                 .iter()
@@ -197,20 +212,34 @@ impl<'a> From<IndexMap<&'a str, AdifType<'a>>> for AdifHeader<'a> {
     }
 }
 
-impl<'a> Display for AdifHeader<'a> {
+impl Display for AdifHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.serialize())
     }
 }
 
-/// Defines an entire file of ADIF data
-#[derive(Debug, Clone, PartialEq)]
-pub struct AdifFile<'a> {
-    pub header: AdifHeader<'a>,
-    pub body: Vec<AdifRecord<'a>>,
+impl Deref for AdifHeader {
+    type Target = IndexMap<String, AdifType>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
-impl<'a> AdifFile<'a> {
+impl DerefMut for AdifHeader {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// Defines an entire file of ADIF data
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdifFile {
+    pub header: AdifHeader,
+    pub body: Vec<AdifRecord>,
+}
+
+impl AdifFile {
 
     /// Serialize into text data to be written to a file
     pub fn serialize(&self) -> Result<String, SerializeError> {
@@ -235,7 +264,7 @@ mod types_tests {
     #[test]
     pub fn test_ser_string() {
         assert_eq!(
-            AdifType::Str("Hello, world!").serialize("test").unwrap(),
+            AdifType::Str("Hello, world!".to_string()).serialize("test").unwrap(),
             "<TEST:13>Hello, world!"
         );
     }
@@ -305,7 +334,7 @@ mod record_tests {
     pub fn test_ser_record() {
         let test_record: AdifRecord = indexmap! {
             "a number" => AdifType::Number(15.5),
-            "test string" => AdifType::Str("Heyo rusty friends!"),
+            "test string" => AdifType::Str("Heyo rusty friends!".to_string()),
         }
         .into();
 
@@ -319,7 +348,7 @@ mod record_tests {
     pub fn test_ser_header() {
         let test_header: AdifHeader = indexmap! {
             "a number" => AdifType::Number(15.5),
-            "test string" => AdifType::Str("Heyo rusty friends!"),
+            "test string" => AdifType::Str("Heyo rusty friends!".to_string()),
         }
         .into();
 
