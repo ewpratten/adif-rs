@@ -25,7 +25,7 @@ fn parse_line_to_tokens(line: &str) -> Vec<Token> {
                 Some(val) => Some(val.as_str().chars().next().unwrap().to_ascii_uppercase()),
                 None => None,
             },
-            value: cap[4].to_string(),
+            value: cap[4].trim_end().to_string(),
         })
         .collect()
 }
@@ -72,8 +72,7 @@ fn parse_tokens_to_header(tokens: Vec<Token>) -> AdifHeader {
 /// Parse the contents of an ADIF (`.adi`) file into a struct representation
 pub fn parse_adif(data: &str) -> AdifFile {
     // Clean up EOH and EOR tokens
-    let data = data.replace("<eoh>", "<EOH>");
-    let data = data.replace("<eor>", "<EOR>");
+    let data = data.replace("<eoh>", "<EOH>").replace("<eor>", "<EOR>");
     let data = data.split("<EOH>");
     let data = data.collect::<Vec<&str>>();
 
@@ -110,11 +109,15 @@ mod tokenization_tests {
 
     #[test]
     pub fn test_line_to_tokens() {
-        let result = parse_line_to_tokens("<CALL:4>VA3ZZA<BAND:3>40m<MODE:2>CW<eor>");
+        let result = parse_line_to_tokens(
+            "<CALL:4>VA3ZZA <BAND:3>40m <MODE:2>CW <NAME:12>Evan Pratten <eor>",
+        );
 
-        assert_eq!(result.len(), 3);
+        assert_eq!(result.len(), 4);
         assert_eq!(result[0].key, "CALL");
         assert_eq!(result[0].value, "VA3ZZA");
+        assert_eq!(result[3].key, "NAME");
+        assert_eq!(result[3].value, "Evan Pratten");
     }
 
     #[test]
