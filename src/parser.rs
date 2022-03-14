@@ -77,12 +77,23 @@ pub fn parse_adif(data: &str) -> AdifFile {
     let data = data.collect::<Vec<&str>>();
 
     // Split file into a header and body
-    let header_raw = data.first().unwrap_or(&"");
     let body_raw = data.last().unwrap_or(&"");
 
     // Parse the header
-    let header_tokens = parse_line_to_tokens(&header_raw);
-    let header = parse_tokens_to_header(header_tokens);
+    let header = match data.len() {
+        2 => {
+            let header_raw = data.first().unwrap_or(&"");
+            let header_tokens = parse_line_to_tokens(&header_raw);
+            parse_tokens_to_header(header_tokens)
+        }
+        1 => { // <EOH> not found; insert empty header
+            let i: IndexMap<String, AdifType> = IndexMap::new();
+            i.into()
+        }
+        _ => {
+            panic!("cannot parse ADIF: multiple <EOH> tokens found")
+        }
+    };
 
     // Create the file
     let file = AdifFile {
