@@ -88,7 +88,7 @@ pub fn parse_adif(data: &str) -> AdifFile {
     let file = AdifFile {
         header,
         body: body_raw
-            .split("<EOR>")
+            .split_terminator("<EOR>")
             .collect::<Vec<&str>>()
             .iter()
             .map(|record_line| {
