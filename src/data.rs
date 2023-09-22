@@ -183,14 +183,22 @@ pub struct AdifHeader(IndexMap<String, AdifType>);
 impl AdifHeader {
     /// Serialize into a full header string
     pub fn serialize(&self) -> Result<String, SerializeError> {
-        let mut output = self
+        let mut output = String::new();
+        output.push_str(
+            &format!("Generated {} (UTC)\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"))
+        );
+
+        let header_tags = self
             .0
             .iter()
             .map(|(key, value)| value.serialize(&key))
             .collect::<Result<Vec<String>, SerializeError>>()?
             .join("\n");
+        output.push_str(&header_tags);
+
         output.push_str("\n");
         output.push_str("<EOH>");
+
         Ok(output)
     }
 }
