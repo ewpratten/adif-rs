@@ -265,7 +265,7 @@ impl AdifFile {
 
 #[cfg(test)]
 mod types_tests {
-    use chrono::{Date, NaiveDate, NaiveTime};
+    use chrono::{NaiveDate, NaiveTime};
 
     use super::*;
 
@@ -310,22 +310,20 @@ mod types_tests {
     #[test]
     pub fn test_ser_date() {
         assert_eq!(
-            AdifType::Date(Date::from_utc(NaiveDate::from_ymd(2020, 2, 24), Utc))
+            AdifType::Date(NaiveDate::from_ymd_opt(2020, 2, 24).unwrap())
                 .serialize("test")
                 .unwrap(),
             "<TEST:8:D>20200224"
         );
-        assert!(
-            AdifType::Date(Date::from_utc(NaiveDate::from_ymd(1910, 2, 2), Utc))
-                .serialize("test")
-                .is_err()
-        );
+        assert!(AdifType::Date(NaiveDate::from_ymd_opt(1910, 2, 2).unwrap())
+            .serialize("test")
+            .is_err());
     }
 
     #[test]
     pub fn test_ser_time() {
         assert_eq!(
-            AdifType::Time(NaiveTime::from_hms(23, 2, 5))
+            AdifType::Time(NaiveTime::from_hms_opt(23, 2, 5).unwrap())
                 .serialize("test")
                 .unwrap(),
             "<TEST:6:T>230205"
@@ -362,9 +360,19 @@ mod record_tests {
         }
         .into();
 
+        let serialized_lines = test_header.serialize().unwrap();
+        let mut serialized_lines = serialized_lines.lines();
+
+        // Skip the "generated" line
+        serialized_lines.next();
+        serialized_lines.next();
+
+        // Test the header lines
+        assert_eq!(serialized_lines.next(), Some("<A_NUMBER:4:N>15.5"));
         assert_eq!(
-            test_header.serialize().unwrap(),
-            "<A_NUMBER:4:N>15.5\n<TEST_STRING:19>Heyo rusty friends!\n<EOH>"
+            serialized_lines.next(),
+            Some("<TEST_STRING:19>Heyo rusty friends!")
         );
+        assert_eq!(serialized_lines.next(), Some("<EOH>"));
     }
 }
