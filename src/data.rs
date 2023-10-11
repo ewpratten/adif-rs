@@ -1,6 +1,9 @@
-use std::{fmt::Display, ops::{Deref, DerefMut}};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
-use chrono::{Datelike, Timelike, Utc};
+use chrono::{Datelike, Timelike};
 use indexmap::IndexMap;
 
 #[derive(Debug)]
@@ -31,7 +34,7 @@ pub enum AdifType {
     ///  - YYYY is a 4-Digit year specifier, where 1930 <= YYYY
     ///  - MM is a 2-Digit month specifier, where 1 <= MM <= 12
     ///  - DD is a 2-Digit day specifier, where 1 <= DD <= DaysInMonth(MM)
-    Date(chrono::Date<Utc>),
+    Date(chrono::NaiveDate),
 
     /// 6 Digits representing a UTC time in HHMMSS format
     /// or 4 Digits representing a time in HHMM format, where:
@@ -130,7 +133,7 @@ impl AdifRecord {
         let mut output = self
             .0
             .iter()
-            .map(|(key, value)| value.serialize(&key))
+            .map(|(key, value)| value.serialize(key))
             .collect::<Result<Vec<String>, SerializeError>>()?
             .join("");
         output.push_str("<eor>");
@@ -140,18 +143,17 @@ impl AdifRecord {
 
 impl From<IndexMap<String, AdifType>> for AdifRecord {
     fn from(map: IndexMap<String, AdifType>) -> Self {
-        Self { 0: map }
+        Self(map)
     }
 }
 
 impl<'a> From<IndexMap<&'a str, AdifType>> for AdifRecord {
     fn from(map: IndexMap<&'a str, AdifType>) -> Self {
-        Self {
-            0: map
-                .iter()
+        Self(
+            map.iter()
                 .map(|(key, value)| (key.to_string(), value.clone()))
                 .collect(),
-        }
+        )
     }
 }
 
@@ -175,7 +177,6 @@ impl DerefMut for AdifRecord {
     }
 }
 
-
 /// An ADIF file header, consisting of many values
 #[derive(Debug, Clone, PartialEq)]
 pub struct AdifHeader(IndexMap<String, AdifType>);
@@ -184,19 +185,20 @@ impl AdifHeader {
     /// Serialize into a full header string
     pub fn serialize(&self) -> Result<String, SerializeError> {
         let mut output = String::new();
-        output.push_str(
-            &format!("Generated {} (UTC)\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"))
-        );
+        output.push_str(&format!(
+            "Generated {} (UTC)\n\n",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
+        ));
 
         let header_tags = self
             .0
             .iter()
-            .map(|(key, value)| value.serialize(&key))
+            .map(|(key, value)| value.serialize(key))
             .collect::<Result<Vec<String>, SerializeError>>()?
             .join("\n");
         output.push_str(&header_tags);
 
-        output.push_str("\n");
+        output.push('\n');
         output.push_str("<EOH>");
 
         Ok(output)
@@ -205,18 +207,17 @@ impl AdifHeader {
 
 impl From<IndexMap<String, AdifType>> for AdifHeader {
     fn from(map: IndexMap<String, AdifType>) -> Self {
-        Self { 0: map }
+        Self(map)
     }
 }
 
 impl<'a> From<IndexMap<&'a str, AdifType>> for AdifHeader {
     fn from(map: IndexMap<&'a str, AdifType>) -> Self {
-        Self {
-            0: map
-                .iter()
+        Self(
+            map.iter()
                 .map(|(key, value)| (key.to_string(), value.clone()))
                 .collect(),
-        }
+        )
     }
 }
 
@@ -248,7 +249,6 @@ pub struct AdifFile {
 }
 
 impl AdifFile {
-
     /// Serialize into text data to be written to a file
     pub fn serialize(&self) -> Result<String, SerializeError> {
         Ok(format!(
@@ -272,7 +272,9 @@ mod types_tests {
     #[test]
     pub fn test_ser_string() {
         assert_eq!(
-            AdifType::Str("Hello, world!".to_string()).serialize("test").unwrap(),
+            AdifType::Str("Hello, world!".to_string())
+                .serialize("test")
+                .unwrap(),
             "<TEST:13>Hello, world!"
         );
     }

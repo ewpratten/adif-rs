@@ -1,4 +1,4 @@
-use chrono::{Date, NaiveDate, NaiveTime, Utc};
+use chrono::{NaiveDate, NaiveTime};
 use indexmap::IndexMap;
 use regex::Regex;
 
@@ -21,10 +21,9 @@ fn parse_line_to_tokens(line: &str) -> Vec<Token> {
         .map(|cap| Token {
             key: cap[1].to_string().to_uppercase(),
             len: cap[2].parse().expect("Length is not an integer"),
-            ty: match cap.get(3) {
-                Some(val) => Some(val.as_str().chars().next().unwrap().to_ascii_uppercase()),
-                None => None,
-            },
+            ty: cap
+                .get(3)
+                .map(|val| val.as_str().chars().next().unwrap().to_ascii_uppercase()),
             value: cap[4].trim_end().to_string(),
         })
         .collect()
@@ -42,13 +41,12 @@ fn create_token_map(tokens: Vec<Token>) -> IndexMap<String, AdifType> {
                 Some(ty) => match ty {
                     'B' => AdifType::Boolean(token.value.to_uppercase() == "Y"),
                     'N' => AdifType::Number(
-                        lexical::parse(token.value.to_string())
+                        lexical::parse(&token.value)
                             .expect("Found a number value that cannot be parsed"),
                     ),
-                    'D' => AdifType::Date(Date::from_utc(
+                    'D' => AdifType::Date(
                         NaiveDate::parse_from_str(token.value.as_str(), "%Y%m%d").unwrap(),
-                        Utc,
-                    )),
+                    ),
                     'T' => AdifType::Time(
                         NaiveTime::parse_from_str(token.value.as_str(), "%H%M%S").unwrap(),
                     ),
@@ -83,10 +81,11 @@ pub fn parse_adif(data: &str) -> AdifFile {
     let header = match data.len() {
         2 => {
             let header_raw = data.first().unwrap_or(&"");
-            let header_tokens = parse_line_to_tokens(&header_raw);
+            let header_tokens = parse_line_to_tokens(header_raw);
             parse_tokens_to_header(header_tokens)
         }
-        1 => { // <EOH> not found; insert empty header
+        1 => {
+            // <EOH> not found; insert empty header
             let i: IndexMap<String, AdifType> = IndexMap::new();
             i.into()
         }
@@ -104,7 +103,7 @@ pub fn parse_adif(data: &str) -> AdifFile {
             .iter()
             .map(|record_line| {
                 // Parse the record
-                let record_tokens = parse_line_to_tokens(&record_line);
+                let record_tokens = parse_line_to_tokens(record_line);
                 parse_tokens_to_record(record_tokens)
             })
             .collect(),
